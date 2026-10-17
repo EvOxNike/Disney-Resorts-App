@@ -2,178 +2,276 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Disney Resort Directory</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Disney Resorts Directory & Map</title>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Leaflet CSS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif&display=swap');
         
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f4f7fb;
-            color: #1f2937;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f2f2f7; /* iOS standard background */
+            color: #1c1c1e;
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
         }
 
-        .magical-gradient {
-            background: linear-gradient(135deg, #1e3a8a, #3b82f6, #60a5fa);
+        /* iOS style blurring */
+        .glass-header {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0,0,0,0.1);
         }
 
-        .card-hover {
+        .glass-tabbar {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(0,0,0,0.1);
+            padding-bottom: env(safe-area-inset-bottom); /* iPhone safe area */
+        }
+
+        /* Cards */
+        .resort-card {
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-        
-        .card-hover:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+        .resort-card:active {
+            transform: scale(0.97);
         }
 
-        .badge {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            margin-right: 0.375rem;
-            margin-bottom: 0.375rem;
-        }
-
-        /* Modal Animations */
-        .modal-overlay {
-            background-color: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(4px);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        
-        .modal-overlay.active {
-            opacity: 1;
-        }
-
-        .modal-content {
-            transform: scale(0.95) translateY(20px);
-            opacity: 0;
-            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
-        }
-
-        .modal-overlay.active .modal-content {
-            transform: scale(1) translateY(0);
-            opacity: 1;
-        }
-
-        /* Hide scrollbar for modal but allow scrolling */
+        /* Hide scrollbar but keep functionality */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
         .no-scrollbar {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Modal Animations */
+        #modalOverlay {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            background: rgba(0,0,0,0.5);
+        }
+        #modalOverlay.active {
+            opacity: 1;
+        }
+        #modalContent {
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1);
+        }
+        #modalOverlay.active #modalContent {
+            transform: translateY(0);
+        }
+
+        /* Map styling */
+        #map {
+            height: 100%;
+            width: 100%;
+            z-index: 10;
+        }
+        
+        /* Map Popup Customization */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .leaflet-popup-content {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-weight: 600;
+            color: #1d4ed8;
+            margin: 12px 16px;
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col overflow-x-hidden">
+<body class="h-screen w-screen overflow-hidden flex flex-col">
 
-    <header class="magical-gradient text-white shadow-md sticky top-0 z-40">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div class="flex items-center cursor-pointer" onclick="filterResorts('All')">
-                    <i class="fa-solid fa-castle text-3xl text-yellow-300 mr-3"></i>
-                    <div>
-                        <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Disney Resort Directory</h1>
+    <!-- APP VIEWS CONTAINER -->
+    <div class="flex-grow relative h-full w-full overflow-hidden">
+        
+        <!-- ==================== DIRECTORY VIEW ==================== -->
+        <div id="viewDirectory" class="absolute inset-0 overflow-y-auto no-scrollbar pb-24 h-full w-full bg-[#f2f2f7] z-20">
+            <!-- Header -->
+            <header class="glass-header sticky top-0 z-30 pt-safe px-4 pb-3">
+                <div class="pt-12 pb-2">
+                    <h1 class="text-3xl font-bold tracking-tight text-gray-900">Resorts</h1>
+                </div>
+                <!-- Categories -->
+                <div class="flex gap-2 overflow-x-auto no-scrollbar py-2">
+                    <button onclick="filterResorts('All')" class="filter-btn bg-blue-600 text-white px-5 py-2 rounded-full font-semibold text-sm transition whitespace-nowrap shadow-sm" data-category="All">All Tiers</button>
+                    <button onclick="filterResorts('Value')" class="filter-btn bg-white text-gray-700 border border-gray-200 px-5 py-2 rounded-full font-semibold text-sm transition whitespace-nowrap shadow-sm" data-category="Value">Value</button>
+                    <button onclick="filterResorts('Moderate')" class="filter-btn bg-white text-gray-700 border border-gray-200 px-5 py-2 rounded-full font-semibold text-sm transition whitespace-nowrap shadow-sm" data-category="Moderate">Moderate</button>
+                    <button onclick="filterResorts('Deluxe')" class="filter-btn bg-white text-gray-700 border border-gray-200 px-5 py-2 rounded-full font-semibold text-sm transition whitespace-nowrap shadow-sm" data-category="Deluxe">Deluxe</button>
+                    <button onclick="filterResorts('Villas')" class="filter-btn bg-white text-gray-700 border border-gray-200 px-5 py-2 rounded-full font-semibold text-sm transition whitespace-nowrap shadow-sm" data-category="Villas">Villas</button>
+                </div>
+            </header>
+
+            <!-- Grid -->
+            <main class="p-4">
+                <div id="resortGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <!-- Resort cards injected here -->
+                </div>
+                <div id="noResults" class="hidden text-center py-20">
+                    <i class="fa-solid fa-ghost text-5xl text-gray-300 mb-3"></i>
+                    <p class="text-gray-500 font-medium text-lg">No resorts found.</p>
+                </div>
+            </main>
+        </div>
+
+        <!-- ==================== MAP VIEW ==================== -->
+        <div id="viewMap" class="absolute inset-0 h-full w-full hidden z-20 bg-white">
+            <header class="glass-header absolute top-0 left-0 right-0 z-[400] pt-safe px-4 pb-3">
+                <div class="pt-12 pb-1">
+                    <h1 class="text-3xl font-bold tracking-tight text-gray-900">Disney Parks</h1>
+                </div>
+            </header>
+            <div id="map" class="mt-10"></div>
+            
+            <!-- Map Legend -->
+            <div class="absolute bottom-24 left-4 z-[400] bg-white/90 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-gray-100 text-xs pointer-events-none">
+                <h4 class="font-bold text-gray-800 mb-2 border-b border-gray-200 pb-1">Map Legend</h4>
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-[10px] text-white" style="background-color: #ec4899;"><i class="fa-solid fa-chess-rook"></i></div>
+                    <span class="font-medium text-gray-700">Theme Parks</span>
+                </div>
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-[10px] text-white" style="background-color: #8b5cf6;"><i class="fa-solid fa-bed"></i></div>
+                    <span class="font-medium text-gray-700">Value Resort</span>
+                </div>
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-[10px] text-white" style="background-color: #10b981;"><i class="fa-solid fa-bed"></i></div>
+                    <span class="font-medium text-gray-700">Moderate Resort</span>
+                </div>
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-[10px] text-white" style="background-color: #f59e0b;"><i class="fa-solid fa-bed"></i></div>
+                    <span class="font-medium text-gray-700">Deluxe Resort</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-[10px] text-white" style="background-color: #ef4444;"><i class="fa-solid fa-bed"></i></div>
+                    <span class="font-medium text-gray-700">Villas (DVC)</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ==================== TAB BAR ==================== -->
+    <nav class="glass-tabbar fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center pt-2 pb-6 px-4">
+        <button onclick="switchTab('directory')" id="tabBtnDirectory" class="flex flex-col items-center justify-center w-20 text-blue-600 transition">
+            <i class="fa-solid fa-bed text-xl mb-1"></i>
+            <span class="text-[10px] font-semibold">Resorts</span>
+        </button>
+        <button onclick="switchTab('map')" id="tabBtnMap" class="flex flex-col items-center justify-center w-20 text-gray-400 hover:text-gray-600 transition">
+            <i class="fa-solid fa-map-location-dot text-xl mb-1"></i>
+            <span class="text-[10px] font-medium">Map</span>
+        </button>
+    </nav>
+
+    <!-- ==================== RESORT DETAIL MODAL (iOS Sheet Style) ==================== -->
+    <div id="modalOverlay" class="fixed inset-0 z-[60] hidden flex-col justify-end" onclick="closeModal(event)">
+        <!-- Modal Content -->
+        <div id="modalContent" class="bg-[#f2f2f7] w-full h-[90vh] rounded-t-3xl shadow-2xl flex flex-col relative overflow-hidden" onclick="event.stopPropagation()">
+            
+            <!-- Drag Handle & Close -->
+            <div class="bg-white px-4 py-3 flex justify-between items-center rounded-t-3xl border-b border-gray-100 z-10 sticky top-0">
+                <div class="w-10"></div> <!-- spacer -->
+                <div class="w-12 h-1.5 bg-gray-300 rounded-full"></div> <!-- handle -->
+                <button onclick="closeModal(null, true)" class="w-10 h-10 flex items-center justify-center bg-gray-100 rounded-full text-gray-600 font-bold active:bg-gray-200">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+
+            <div class="overflow-y-auto no-scrollbar pb-10">
+                <!-- Hero Image -->
+                <div class="relative h-64 w-full bg-gray-200">
+                    <img id="modalImage" src="" alt="Resort Image" class="w-full h-full object-cover">
+                    <div class="absolute bottom-4 left-4 right-4">
+                        <span id="modalCategoryBadge" class="bg-white/90 backdrop-blur text-gray-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm uppercase tracking-wider mb-2 inline-block"></span>
+                        <h2 id="modalTitle" class="text-3xl font-bold text-white drop-shadow-md shadow-black"></h2>
                     </div>
                 </div>
-                
-                <div class="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto scroll-smooth no-scrollbar">
-                    <button onclick="filterResorts('All')" class="filter-btn bg-yellow-400 text-blue-900 hover:bg-yellow-300 px-5 py-2 rounded-full font-bold transition whitespace-nowrap shadow-sm" data-category="All">All Tiers</button>
-                    <button onclick="filterResorts('Value')" class="filter-btn bg-white/20 hover:bg-white/30 text-white px-5 py-2 rounded-full font-semibold transition whitespace-nowrap" data-category="Value">Value</button>
-                    <button onclick="filterResorts('Moderate')" class="filter-btn bg-white/20 hover:bg-white/30 text-white px-5 py-2 rounded-full font-semibold transition whitespace-nowrap" data-category="Moderate">Moderate</button>
-                    <button onclick="filterResorts('Deluxe')" class="filter-btn bg-white/20 hover:bg-white/30 text-white px-5 py-2 rounded-full font-semibold transition whitespace-nowrap" data-category="Deluxe">Deluxe</button>
-                    <button onclick="filterResorts('Villas')" class="filter-btn bg-white/20 hover:bg-white/30 text-white px-5 py-2 rounded-full font-semibold transition whitespace-nowrap" data-category="Villas">Villas</button>
-                </div>
-            </div>
-        </div>
-    </header>
 
-    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        <div id="resortGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <!-- Resort cards injected via JS -->
-        </div>
-
-        <div id="noResults" class="hidden flex flex-col items-center justify-center py-20">
-            <i class="fa-regular fa-compass text-6xl text-gray-300 mb-4"></i>
-            <h3 class="text-2xl font-medium text-gray-500">No resorts found.</h3>
-        </div>
-    </main>
-
-    <!-- Modal Backdrop -->
-    <div id="modalOverlay" class="modal-overlay fixed inset-0 z-50 hidden flex items-center justify-center p-4 sm:p-6" onclick="closeModal(event)">
-        <!-- Modal Content -->
-        <div id="modalContainer" class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col relative" onclick="event.stopPropagation()">
-            
-            <!-- Close Button -->
-            <button onclick="closeModal(null, true)" class="absolute top-4 right-4 bg-black/40 hover:bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center transition z-10">
-                <i class="fa-solid fa-times"></i>
-            </button>
-
-            <!-- Modal Header (Dynamic Color) -->
-            <div id="modalHeader" class="px-6 py-8 text-white relative">
-                <div class="absolute inset-0 opacity-20 flex items-center justify-center overflow-hidden pointer-events-none">
-                    <i id="modalHeaderIcon" class="fa-solid fa-castle text-[12rem] -rotate-12 transform scale-150"></i>
-                </div>
-                <div class="relative z-10">
-                    <span id="modalCategoryBadge" class="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide mb-3 inline-block"></span>
-                    <h2 id="modalTitle" class="text-3xl font-bold mb-1"></h2>
-                    <p id="modalPrice" class="text-xl font-medium opacity-90"></p>
-                </div>
-            </div>
-
-            <!-- Modal Body (Scrollable) -->
-            <div class="p-6 overflow-y-auto no-scrollbar flex-grow bg-gray-50">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="p-4 space-y-4">
                     
-                    <!-- Left Column: Rooms & Transport -->
-                    <div class="space-y-6">
-                        <!-- Rooms -->
-                        <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                            <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center">
-                                <i class="fa-solid fa-bed mr-2"></i> Room Options & Sq Ft
-                            </h3>
-                            <ul id="modalRooms" class="space-y-3">
-                                <!-- Room list injected here -->
-                            </ul>
-                        </div>
+                    <!-- Room Types & Pricing -->
+                    <div class="bg-white rounded-2xl p-4 shadow-sm">
+                        <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center">
+                            <i class="fa-solid fa-tag text-blue-500 mr-2"></i> Room Pricing & Sizes
+                        </h3>
+                        <ul id="modalRooms" class="space-y-3">
+                            <!-- Injected via JS -->
+                        </ul>
+                    </div>
 
-                        <!-- Transportation -->
-                        <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                            <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center">
-                                <i class="fa-solid fa-route mr-2"></i> Transportation
+                    <!-- Daily Pricing Calendar -->
+                    <div class="bg-white rounded-2xl p-4 shadow-sm">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider flex items-center">
+                                <i class="fa-regular fa-calendar-days text-blue-500 mr-2"></i> Daily Pricing Estimator
                             </h3>
-                            <div id="modalTransport" class="flex flex-wrap gap-2">
-                                <!-- Badges injected here -->
+                            <div class="flex gap-1">
+                                <button onclick="changeMonth(-1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200"><i class="fa-solid fa-chevron-left"></i></button>
+                                <button onclick="changeMonth(1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200"><i class="fa-solid fa-chevron-right"></i></button>
                             </div>
                         </div>
+                        <h4 id="calendarMonth" class="text-center font-bold text-gray-800 mb-2"></h4>
+                        <div class="grid grid-cols-7 gap-1 text-center text-xs text-gray-400 font-bold mb-1">
+                            <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+                        </div>
+                        <div id="calendarGrid" class="grid grid-cols-7 gap-1 text-center text-sm">
+                            <!-- Days injected here -->
+                        </div>
+                        <p class="text-[9px] text-gray-400 mt-3 text-center leading-tight">
+                            *Disney uses dynamic pricing. These numbers are a generated simulation of Disney's seasonal trends based on this resort's base rate.
+                        </p>
                     </div>
 
-                    <!-- Right Column: Dining & Special Features -->
-                    <div class="space-y-6">
-                        <!-- Dining -->
-                        <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                            <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center">
-                                <i class="fa-solid fa-utensils mr-2"></i> Dining Highlights
-                            </h3>
-                            <ul id="modalDining" class="space-y-2 text-gray-700 text-sm">
-                                <!-- Dining list injected here -->
+                    <!-- Transport -->
+                    <div class="bg-white rounded-2xl p-4 shadow-sm">
+                        <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center">
+                            <i class="fa-solid fa-route text-blue-500 mr-2"></i> Transportation
+                        </h3>
+                        <div id="modalTransport" class="flex flex-wrap gap-2">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Dining -->
+                    <div class="bg-white rounded-2xl p-4 shadow-sm">
+                        <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center">
+                            <i class="fa-solid fa-utensils text-blue-500 mr-2"></i> Dining Highlights
+                        </h3>
+                        <ul id="modalDining" class="space-y-2 text-gray-700 text-sm font-medium mb-3">
+                            <!-- Injected via JS -->
+                        </ul>
+                        
+                        <!-- NEW POPULAR FOODS SECTION -->
+                        <div class="pt-3 border-t border-gray-100">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center">
+                                <i class="fa-solid fa-star text-yellow-400 mr-2"></i> 5 Popular Items
+                            </h4>
+                            <ul id="modalPopularFoods" class="space-y-1.5 text-gray-600 text-sm pl-1">
+                                <!-- Injected via JS -->
                             </ul>
                         </div>
+                    </div>
 
-                        <!-- Special Features -->
-                        <div class="bg-blue-50 p-5 rounded-xl border border-blue-100 shadow-sm">
-                            <h3 class="text-sm font-bold text-blue-800 uppercase tracking-wider mb-3 flex items-center">
-                                <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Special Amenities
-                            </h3>
-                            <p id="modalSpecial" class="text-sm text-blue-900 leading-relaxed"></p>
-                        </div>
+                    <!-- Special Features -->
+                    <div class="bg-blue-600 rounded-2xl p-5 shadow-sm text-white">
+                        <h3 class="text-sm font-bold text-blue-200 uppercase tracking-wider mb-2 flex items-center">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Why stay here?
+                        </h3>
+                        <p id="modalSpecial" class="text-sm leading-relaxed font-medium text-white"></p>
                     </div>
 
                 </div>
@@ -181,239 +279,345 @@
         </div>
     </div>
 
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
     <script>
+        // ======================= DATA =======================
         const resortsData = [
-            // VALUE RESORTS
+            // VALUE
             {
                 id: "pop-century",
-                name: "Disney's Pop Century Resort",
+                name: "Pop Century Resort",
                 category: "Value",
-                price: "From $180 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Orlando_-_Disney_World_-_Disney%27s_Pop_Century_Resort_-_Art_of_Animation_Resort_Across_Hourglass_Lake_(17031500338).jpg?width=800",
                 rooms: [
-                    { name: "Standard Room", sqft: 260 }
+                    { name: "Standard Room", sqft: 260, price: "$180 - $290" }
                 ],
                 transport: ["Skyliner", "Bus"],
-                dining: ["Everything POP Shopping & Dining (Quick Service)"],
-                special: "Features larger-than-life icons representing the 1950s through 1990s. Direct Disney Skyliner access to EPCOT and Hollywood Studios.",
-                color: "bg-pink-600",
-                icon: "fa-record-vinyl"
+                dining: ["Everything POP (Quick Service)"],
+                popularFoods: ["Tie-Dye Cheesecake", "POP Waffle", "Mom's Night Out Fried Chicken", "Pot Roast", "Everything Pop Sundae"],
+                special: "Features larger-than-life icons representing the 1950s through 1990s. Direct Disney Skyliner access.",
+                coords: [28.3503, -81.5422]
             },
             {
                 id: "art-of-animation",
-                name: "Disney's Art of Animation Resort",
+                name: "Art of Animation Resort",
                 category: "Value",
-                price: "From $200 (Standard) / $500 (Suites)",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Art_of_Animation_Resort_(6989406350).jpg?width=800",
                 rooms: [
-                    { name: "Little Mermaid Standard Room", sqft: 277 },
-                    { name: "Family Suite (Cars, Nemo, Lion King)", sqft: 565 }
+                    { name: "Standard Room (Little Mermaid)", sqft: 277, price: "$200 - $300" },
+                    { name: "Family Suite (Lion King, Cars)", sqft: 565, price: "$450 - $650" }
                 ],
                 transport: ["Skyliner", "Bus"],
-                dining: ["Landscape of Flavors (Quick Service)", "The Drop Off Pool Bar"],
-                special: "Home to the largest resort pool in Walt Disney World (The Big Blue Pool). Highly themed family suites fit up to 6 adults.",
-                color: "bg-purple-600",
-                icon: "fa-palette"
+                dining: ["Landscape of Flavors (Quick Service)"],
+                popularFoods: ["Surf and Surf Burger", "Character Waffles", "House-made Gelato", "Tandoori Chicken", "Mermaid Tail Cupcake"],
+                special: "Home to the largest resort pool in Walt Disney World. Beautifully themed family suites fit up to 6 adults.",
+                coords: [28.3490, -81.5458]
             },
             {
                 id: "all-star-movies",
-                name: "Disney's All-Star Movies Resort",
+                name: "All-Star Movies Resort",
                 category: "Value",
-                price: "From $130 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_All-Star_Movies_Resort_08.JPG?width=800",
                 rooms: [
-                    { name: "Standard Room", sqft: 260 }
+                    { name: "Standard Room", sqft: 260, price: "$130 - $220" }
                 ],
                 transport: ["Bus"],
-                dining: ["World Premiere Food Court", "Silver Screen Spirits Pool Bar"],
+                dining: ["World Premiere Food Court"],
+                popularFoods: ["Secret Menu Poutine", "Mickey Waffles", "Chili-Cheese Hot Dog", "Cinema Burger", "Mickey Shaped Brownie"],
                 special: "Budget-friendly with giant décor celebrating classic Disney films like Toy Story, Fantasia, and 101 Dalmatians.",
-                color: "bg-blue-500",
-                icon: "fa-film"
+                coords: [28.3377, -81.5714]
             },
             {
                 id: "all-star-music",
-                name: "Disney's All-Star Music Resort",
+                name: "All-Star Music Resort",
                 category: "Value",
-                price: "From $130 (Standard) / $350 (Suites)",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%C2%B4s_All_Star_Music_Resort_-_panoramio.jpg?width=800",
                 rooms: [
-                    { name: "Standard Room", sqft: 260 },
-                    { name: "Family Suite", sqft: 520 }
+                    { name: "Standard Room", sqft: 260, price: "$130 - $220" },
+                    { name: "Family Suite", sqft: 520, price: "$350 - $550" }
                 ],
                 transport: ["Bus"],
-                dining: ["Intermission Food Court", "Singing Spirits Pool Bar"],
+                dining: ["Intermission Food Court"],
+                popularFoods: ["Pull-Apart Cupcake", "Plant-based Tuna Sandwich", "Mickey Waffles", "House-made Pizza", "Braised Meatballs"],
                 special: "The only 'All-Star' property to offer Family Suites with kitchenettes. Guitar and piano shaped pools.",
-                color: "bg-teal-500",
-                icon: "fa-guitar"
+                coords: [28.3400, -81.5727]
             },
-
-            // MODERATE RESORTS
+            {
+                id: "all-star-sports",
+                name: "All-Star Sports Resort",
+                category: "Value",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_All-Star_Sports_aerial_photo_(7426583484).jpg?width=800",
+                rooms: [
+                    { name: "Standard Room", sqft: 260, price: "$130 - $220" }
+                ],
+                transport: ["Bus"],
+                dining: ["End Zone Food Court"],
+                popularFoods: ["Grandstand Burger", "Mickey Waffles", "Game Day Chili", "Barbecue Pulled Pork Sandwich", "Chocolate Chip Cookie"],
+                special: "Celebrates the active life with giant football helmets, surfboards, and baseball themes.",
+                coords: [28.3435, -81.5744]
+            },
+            
+            // MODERATE
             {
                 id: "caribbean-beach",
-                name: "Disney's Caribbean Beach Resort",
+                name: "Caribbean Beach Resort",
                 category: "Moderate",
-                price: "From $260 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Caribbean_Beach_Resort.JPG?width=800",
                 rooms: [
-                    { name: "Standard Room (5th sleeper avail)", sqft: 314 }
+                    { name: "Standard Room (5th sleeper avail)", sqft: 314, price: "$260 - $390" }
                 ],
                 transport: ["Skyliner", "Bus"],
-                dining: ["Sebastian's Bistro (Table Service)", "Centertown Market", "Spyglass Grill", "Banana Cabana"],
-                special: "Serves as the main transfer hub for the Disney Skyliner. Features a heavily themed zero-entry pool with water cannons.",
-                color: "bg-orange-500",
-                icon: "fa-umbrella-beach"
+                dining: ["Sebastian's Bistro (Table Service)", "Centertown Market"],
+                popularFoods: ["Cuban Sandwich", "Caribbean Jerk Chicken", "Key Lime Tart", "Tropical Pull-Apart Bread", "Beef Empanadas"],
+                special: "Serves as the main transfer hub for the Disney Skyliner. Tropical island feel with zero-entry feature pool.",
+                coords: [28.3619, -81.5422]
             },
             {
                 id: "coronado-springs",
-                name: "Disney's Coronado Springs Resort",
+                name: "Coronado Springs Resort",
                 category: "Moderate",
-                price: "From $260 (Standard) / $350 (Tower)",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Coronado_Springs_Resort_(27780524793).jpg?width=800",
                 rooms: [
-                    { name: "Standard Room (Villages)", sqft: 314 },
-                    { name: "Gran Destino Tower Room", sqft: 375 },
-                    { name: "Casitas / Tower Suites", sqft: "750 - 1500" }
+                    { name: "Standard Room (Villages)", sqft: 314, price: "$260 - $350" },
+                    { name: "Gran Destino Tower Room", sqft: 375, price: "$350 - $500" },
+                    { name: "Tower Suite", sqft: 750, price: "$800 - $1200+" }
                 ],
                 transport: ["Bus"],
-                dining: ["Toledo - Tapas, Steak & Seafood", "Three Bridges Bar & Grill", "Maya Grill", "El Mercado de Coronado"],
-                special: "A convention resort featuring the upscale Gran Destino Tower, offering Deluxe-style amenities and rooftop dining at a Moderate price point.",
-                color: "bg-red-700",
-                icon: "fa-sun"
+                dining: ["Toledo (Rooftop)", "Three Bridges Bar & Grill", "El Mercado"],
+                popularFoods: ["Warm Churros", "Spanish Charcuterie", "Braised Beef", "Three Bridges Signature Burger", "Cafe con Leche"],
+                special: "Offers Deluxe-style amenities like a grand tower, fitness centers, and rooftop dining at a Moderate price point.",
+                coords: [28.3616, -81.5744]
             },
             {
                 id: "port-orleans-riverside",
-                name: "Disney's Port Orleans Resort - Riverside",
+                name: "Port Orleans - Riverside",
                 category: "Moderate",
-                price: "From $280 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Port_Orleans_Resort_Riverside_Entrance_2024.jpg?width=800",
                 rooms: [
-                    { name: "Standard Room (5th sleeper avail)", sqft: 314 },
-                    { name: "Royal Guest Room", sqft: 314 }
+                    { name: "Standard Room", sqft: 314, price: "$280 - $400" },
+                    { name: "Royal Guest Room", sqft: 314, price: "$350 - $480" }
                 ],
                 transport: ["Boat", "Bus"],
-                dining: ["Boatwright's Dining Hall", "Riverside Mill Food Court", "River Roost Lounge (Yehaa Bob)"],
-                special: "Sprawling, romantic bayou setting. Offers horse-drawn carriage rides and Royal Guest rooms heavily themed to Disney Princesses.",
-                color: "bg-green-700",
-                icon: "fa-tree"
+                dining: ["Boatwright's Dining Hall", "Riverside Mill Food Court"],
+                popularFoods: ["Slow-roasted Prime Rib", "Bayou Jambalaya", "Pimento Cheese Fritters", "Southern Fried Pecan Pie", "Baton Rouge Burger"],
+                special: "Sprawling, romantic bayou setting. Offers horse-drawn carriage rides and Princess-themed Royal Guest rooms.",
+                coords: [28.3846, -81.5369]
+            },
+            {
+                id: "port-orleans-french-quarter",
+                name: "Port Orleans - French Quarter",
+                category: "Moderate",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Orlando_-_Disney_World_-_Disney%27s_Port_Orleans_Resort_-_French_Quarter_-_Lobby_(17033143829).jpg?width=800",
+                rooms: [
+                    { name: "Standard Room", sqft: 314, price: "$280 - $400" }
+                ],
+                transport: ["Boat", "Bus"],
+                dining: ["Sassagoula Floatworks and Food Factory", "Scat Cat's Club"],
+                popularFoods: ["Mickey Beignets", "Sassagoula Gumbo", "Shrimp and Grits", "Jambalaya", "Praline Pecan Cookie"],
+                special: "Disney's most compact resort. Features cobblestone streets, fresh beignets, and a Mardi Gras theme.",
+                coords: [28.3797, -81.5365]
             },
             {
                 id: "fort-wilderness-cabins",
-                name: "The Cabins at Disney's Fort Wilderness",
+                name: "The Cabins at Fort Wilderness",
                 category: "Moderate",
-                price: "From $450 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Fort_Wilderness_Resort_-_FWRR_Logo.jpg?width=800",
                 rooms: [
-                    { name: "Wilderness Cabin (Sleeps 6)", sqft: 504 }
+                    { name: "Wilderness Cabin (Sleeps 6)", sqft: 504, price: "$450 - $650" }
                 ],
                 transport: ["Boat", "Bus"],
-                dining: ["Trail's End Restaurant", "Hoop-Dee-Doo Musical Revue", "Meadow Snack Bar"],
-                special: "Private stand-alone cabins with full kitchens, decks, and charcoal grills. Resort features horseback riding, archery, and campfires.",
-                color: "bg-amber-800",
-                icon: "fa-campground"
+                dining: ["Trail's End Restaurant", "Hoop-Dee-Doo Musical Revue"],
+                popularFoods: ["All-You-Care-To-Enjoy Fried Chicken", "Strawberry Shortcake", "Smoked BBQ Ribs", "House-made Cornbread", "Pulled Pork"],
+                special: "Private stand-alone cabins with full kitchens and decks. Resort features horseback riding and campfires.",
+                coords: [28.4069, -81.5540]
             },
 
-            // DELUXE RESORTS
+            // DELUXE
             {
                 id: "polynesian",
-                name: "Disney's Polynesian Village Resort",
+                name: "Polynesian Village Resort",
                 category: "Deluxe",
-                price: "From $650 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Polynesian_Village_Resort_at_Sunset.jpg?width=800",
                 rooms: [
-                    { name: "Standard Room", sqft: 415 }
+                    { name: "Standard Room", sqft: 415, price: "$650 - $900" },
+                    { name: "Deluxe Studio (DVC)", sqft: 415, price: "$700 - $950" },
+                    { name: "Bora Bora Bungalow", sqft: 1093, price: "$3,000 - $4,500" }
                 ],
                 transport: ["Monorail", "Boat", "Walk", "Bus"],
-                dining: ["'Ohana", "Kona Cafe", "Capt. Cook's", "Trader Sam's Grog Grotto", "Pineapple Lanai (Dole Whip)"],
-                special: "Original 1971 resort. Incredible views of Magic Kingdom fireworks from the beach. Direct monorail access.",
-                color: "bg-orange-700",
-                icon: "fa-volcano"
+                dining: ["'Ohana", "Kona Cafe", "Trader Sam's", "Pineapple Lanai"],
+                popularFoods: ["Pineapple Dole Whip", "Tonga Toast", "'Ohana Noodles", "'Ohana Bread Pudding", "Lapu Lapu (Served in a Pineapple)"],
+                special: "Original 1971 resort. Incredible views of Magic Kingdom fireworks from the beach and direct monorail access.",
+                coords: [28.4057, -81.5839]
             },
             {
                 id: "contemporary",
-                name: "Disney's Contemporary Resort",
+                name: "Contemporary Resort",
                 category: "Deluxe",
-                price: "From $620 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Contemporary_Resort_side.jpg?width=800",
                 rooms: [
-                    { name: "Tower Room / Garden Wing", sqft: 394 }
+                    { name: "Garden Wing Room", sqft: 394, price: "$550 - $700" },
+                    { name: "Main Tower Room", sqft: 394, price: "$750 - $1,000" }
                 ],
                 transport: ["Monorail", "Walk", "Boat", "Bus"],
-                dining: ["California Grill", "Chef Mickey's", "Steakhouse 71", "Contempo Cafe"],
-                special: "The Resort Monorail runs directly through the soaring A-frame tower. An easy 10-minute walk to the Magic Kingdom gates.",
-                color: "bg-slate-700",
-                icon: "fa-train"
+                dining: ["California Grill", "Chef Mickey's", "Steakhouse 71"],
+                popularFoods: ["Peanut Butter Pie", "Pork Belly Nigiri", "Oak-fired Filet Mignon", "Bacon & Eggs (Pork Belly)", "Chef Mickey's Waffles"],
+                special: "The Resort Monorail runs directly through the soaring A-frame tower. An easy 10-minute walk to Magic Kingdom.",
+                coords: [28.4151, -81.5744]
             },
             {
                 id: "grand-floridian",
-                name: "Disney's Grand Floridian Resort & Spa",
+                name: "Grand Floridian Resort & Spa",
                 category: "Deluxe",
-                price: "From $750 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Grand_Floridian_Resort_%26_Spa_from_Seven_Seas_Lagoon_2.jpg?width=800",
                 rooms: [
-                    { name: "Standard Room", sqft: 440 }
+                    { name: "Standard Room", sqft: 440, price: "$750 - $1,100" },
+                    { name: "Club Level Room", sqft: 440, price: "$1,000 - $1,500" }
                 ],
                 transport: ["Monorail", "Walk", "Boat", "Bus"],
-                dining: ["Victoria & Albert's", "Citricos", "Narcoossee's", "Grand Floridian Cafe", "Gasparilla Island Grill"],
-                special: "Disney World's flagship resort featuring Victorian elegance, a full-service spa, a live lobby pianist, and world-class fine dining.",
-                color: "bg-red-900",
-                icon: "fa-crown"
-            },
-            {
-                id: "beach-club",
-                name: "Disney's Beach Club Resort",
-                category: "Deluxe",
-                price: "From $580 / night",
-                rooms: [
-                    { name: "Standard Room", sqft: 380 }
-                ],
-                transport: ["Walk", "Boat", "Skyliner", "Bus"],
-                dining: ["Beaches & Cream Soda Shop", "Cape May Cafe", "Martha's Vineyard"],
-                special: "Located steps away from EPCOT's International Gateway. Shares Stormalong Bay, a massive 3-acre sand-bottom pool complex.",
-                color: "bg-cyan-700",
-                icon: "fa-water"
+                dining: ["Victoria & Albert's", "Citricos", "Narcoossee's", "Grand Floridian Cafe"],
+                popularFoods: ["Grand Marnier Souffle", "Lobster Thermidor Burger", "Strawberry Soup", "Almond Crusted Cheesecake", "Artisan Chocolate Truffles"],
+                special: "Disney World's flagship resort featuring Victorian elegance, a full-service spa, and a live lobby pianist.",
+                coords: [28.4109, -81.5878]
             },
             {
                 id: "animal-kingdom-lodge",
-                name: "Disney's Animal Kingdom Lodge",
+                name: "Animal Kingdom Lodge",
                 category: "Deluxe",
-                price: "From $460 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Animal_Kingdom_Lodge_(43232873352).jpg?width=800",
                 rooms: [
-                    { name: "Standard / Savanna View Room", sqft: 344 }
+                    { name: "Standard Room", sqft: 344, price: "$460 - $650" },
+                    { name: "Savanna View Room", sqft: 344, price: "$600 - $850" }
                 ],
                 transport: ["Bus"],
-                dining: ["Jiko - The Cooking Place", "Boma - Flavors of Africa", "Sanaa (Kidani Village)", "The Mara"],
-                special: "Features 4 lush savannas home to over 200 hoofed animals and birds. You can view giraffes and zebras right from your balcony.",
-                color: "bg-yellow-800",
-                icon: "fa-hippo"
+                dining: ["Jiko", "Boma", "Sanaa", "The Mara"],
+                popularFoods: ["Zebra Domes", "Indian-style Bread Service", "Oak-grilled Filet Mignon", "Bobotie", "Kenyan Coffee"],
+                special: "Features 4 lush savannas home to over 200 hoofed animals and birds. View giraffes right from your balcony.",
+                coords: [28.3533, -81.6027]
+            },
+            {
+                id: "wilderness-lodge",
+                name: "Wilderness Lodge",
+                category: "Deluxe",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Wilderness_Lodge_(30175134254).jpg?width=800",
+                rooms: [
+                    { name: "Standard Room", sqft: 344, price: "$450 - $650" },
+                    { name: "Copper Creek Cabin", sqft: 1213, price: "$2,000 - $3,500" }
+                ],
+                transport: ["Boat", "Bus"],
+                dining: ["Story Book Dining at Artist Point", "Whispering Canyon Cafe", "Geyser Point"],
+                popularFoods: ["Mushroom Bisque", "All-You-Care-To-Enjoy Skillet", "Bison Cheeseburger", "Campfire Brownie", "Magic Bar"],
+                special: "Pacific Northwest national park lodge theming complete with a soaring lobby, totem poles, and an erupting geyser.",
+                coords: [28.4055, -81.5729]
+            },
+            {
+                id: "boardwalk-inn",
+                name: "BoardWalk Inn",
+                category: "Deluxe",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Boardwalk_01.jpg?width=800",
+                rooms: [
+                    { name: "Standard Room", sqft: 371, price: "$580 - $800" }
+                ],
+                transport: ["Walk", "Boat", "Skyliner", "Bus"],
+                dining: ["Flying Fish", "Trattoria al Forno", "BoardWalk Deli"],
+                popularFoods: ["Potato-wrapped Red Snapper", "BoardWalk Deli Pastrami", "Truffle Mac & Cheese", "Fresh Pizza Slices", "BoardWalk Ice Cream"],
+                special: "Set along a 1920s-style Coney Island boardwalk featuring carnival games, street performers, and direct EPCOT access.",
+                coords: [28.3664, -81.5559]
+            },
+            {
+                id: "yacht-club",
+                name: "Yacht Club Resort",
+                category: "Deluxe",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Yacht_Club_Resort.jpg?width=800",
+                rooms: [
+                    { name: "Standard Room", sqft: 381, price: "$580 - $800" }
+                ],
+                transport: ["Walk", "Boat", "Skyliner", "Bus"],
+                dining: ["Yachtsman Steakhouse", "Ale & Compass"],
+                popularFoods: ["Truffle Macaroni & Cheese", "Signature Porterhouse Steak", "Parker House Rolls", "Lobster Bisque", "Dark Chocolate Cake"],
+                special: "Nautical-themed luxury resort that shares Stormalong Bay—a 3-acre sand-bottom pool complex—with the Beach Club.",
+                coords: [28.3705, -81.5564]
+            },
+            {
+                id: "beach-club",
+                name: "Beach Club Resort",
+                category: "Deluxe",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Disney%27s_Beach_Club_Resort_en_janvier_2022.JPG?width=800",
+                rooms: [
+                    { name: "Standard Room", sqft: 381, price: "$580 - $800" }
+                ],
+                transport: ["Walk", "Boat", "Skyliner", "Bus"],
+                dining: ["Beaches & Cream Soda Shop", "Cape May Cafe"],
+                popularFoods: ["The Kitchen Sink Sundae", "No Way Jose Sundae", "Cape May Seafood Boil", "Grilled Cheese & Tomato Soup", "Minnie Mouse Cupcake"],
+                special: "Casual New England style. Offers the absolute closest walking path to EPCOT's International Gateway entrance.",
+                coords: [28.3713, -81.5542]
             },
 
-            // VILLAS (DVC)
+            // VILLAS
             {
                 id: "riviera",
-                name: "Disney's Riviera Resort",
+                name: "Riviera Resort",
                 category: "Villas",
-                price: "From $600 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Riviera_at_Night_(49560224208)_(cropped).jpg?width=800",
                 rooms: [
-                    { name: "Tower Studio (Sleeps 2)", sqft: 211 },
-                    { name: "Deluxe Studio", sqft: 346 },
-                    { name: "1-Bedroom Villa", sqft: 813 },
-                    { name: "2-Bedroom Villa", sqft: 1246 },
-                    { name: "3-Bedroom Grand Villa", sqft: 2530 }
+                    { name: "Tower Studio (Sleeps 2)", sqft: 211, price: "$600 - $750" },
+                    { name: "Deluxe Studio", sqft: 346, price: "$700 - $900" },
+                    { name: "1-Bedroom Villa", sqft: 813, price: "$1,000 - $1,400" },
+                    { name: "2-Bedroom Villa", sqft: 1246, price: "$1,500 - $2,200" }
                 ],
                 transport: ["Skyliner", "Bus"],
-                dining: ["Topolino's Terrace (Character/Signature)", "Primo Piatto", "Bar Riva"],
-                special: "Inspired by the European Riviera. Features stunning mosaic art murals and a dedicated Skyliner station.",
-                color: "bg-indigo-700",
-                icon: "fa-wine-glass"
+                dining: ["Topolino's Terrace", "Primo Piatto", "Bar Riva"],
+                popularFoods: ["Lemon Ricotta Pancakes", "Rigatoni (Topolino's)", "Croque Monsieur", "Le Petit Cafe Pastries", "Quiche Gruyere"],
+                special: "European elegance, stunning mosaic art murals, rooftop character dining, and a dedicated Skyliner station.",
+                coords: [28.3653, -81.5428]
             },
             {
                 id: "old-key-west",
-                name: "Disney's Old Key West Resort",
+                name: "Old Key West Resort",
                 category: "Villas",
-                price: "From $450 / night",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Old_key_west_panoramic.jpg?width=800",
                 rooms: [
-                    { name: "Deluxe Studio", sqft: 390 },
-                    { name: "1-Bedroom Villa", sqft: 942 },
-                    { name: "2-Bedroom Villa", sqft: 1395 },
-                    { name: "3-Bedroom Grand Villa", sqft: 2375 }
+                    { name: "Deluxe Studio", sqft: 390, price: "$450 - $600" },
+                    { name: "1-Bedroom Villa", sqft: 942, price: "$650 - $900" },
+                    { name: "2-Bedroom Villa", sqft: 1395, price: "$900 - $1,300" },
+                    { name: "3-Bedroom Grand Villa", sqft: 2375, price: "$1,800 - $2,500" }
                 ],
                 transport: ["Boat", "Bus"],
                 dining: ["Olivia's Cafe", "Good's Food to Go", "Gurgling Suitcase"],
-                special: "The original Disney Vacation Club property, boasting the largest room sizes/square footage on property and a relaxed golf-course setting.",
-                color: "bg-lime-700",
-                icon: "fa-house-chimney-window"
+                popularFoods: ["Conch Fritters", "Southernmost Buttermilk Fried Chicken", "Key Lime Tart", "Turtle Krawl Drink", "Slow-roasted Prime Rib"],
+                special: "The original Disney Vacation Club property, boasting the largest room sizes on property and a relaxed golf-course setting.",
+                coords: [28.3744, -81.5348]
+            },
+            {
+                id: "saratoga-springs",
+                name: "Saratoga Springs Resort & Spa",
+                category: "Villas",
+                imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Saratoga_Springs_Resort.jpg?width=800",
+                rooms: [
+                    { name: "Deluxe Studio", sqft: 355, price: "$400 - $550" },
+                    { name: "1-Bedroom Villa", sqft: 714, price: "$600 - $850" },
+                    { name: "Treehouse Villa", sqft: 1074, price: "$1,000 - $1,500" }
+                ],
+                transport: ["Boat", "Bus"],
+                dining: ["The Turf Club Bar and Grill", "Artist's Palette"],
+                popularFoods: ["Saratoga House Salad", "House-made Saratoga Chips", "Prime Rib", "Applewood-smoked Bacon Cheeseburger", "The Derby Drink"],
+                special: "Equestrian-themed resort located right across the water from Disney Springs, featuring unique standalone Treehouse Villas.",
+                coords: [28.3813, -81.5208]
             }
         ];
 
+        // Parks Data for Map
+        const parksData = [
+            { name: "Magic Kingdom", coords: [28.4177, -81.5812], icon: "fa-chess-rook", color: "#ec4899" }, // Pink
+            { name: "EPCOT", coords: [28.3747, -81.5494], icon: "fa-globe", color: "#3b82f6" }, // Blue
+            { name: "Hollywood Studios", coords: [28.3575, -81.5583], icon: "fa-film", color: "#eab308" }, // Yellow
+            { name: "Animal Kingdom", coords: [28.3529, -81.5906], icon: "fa-leaf", color: "#22c55e" } // Green
+        ];
+
+        // ======================= APP LOGIC =======================
+
+        // 1. Render Directory Grid
         function renderGrid(resorts) {
             const grid = document.getElementById('resortGrid');
             const noResults = document.getElementById('noResults');
@@ -429,32 +633,32 @@
             noResults.classList.add('hidden');
 
             resorts.forEach(resort => {
-                // Generate Transport icons for card
-                const transportIcons = resort.transport.map(t => {
-                    let iconClass = 'fa-bus';
-                    if(t==='Monorail') iconClass='fa-train';
-                    if(t==='Boat') iconClass='fa-ship';
-                    if(t==='Walk') iconClass='fa-person-walking';
-                    if(t==='Skyliner') iconClass='fa-cable-car';
-                    return `<i class="fa-solid ${iconClass} mx-1" title="${t}"></i>`;
-                }).join('');
+                const basePrice = resort.rooms[0].price.split(' ')[0];
 
                 const cardHTML = `
-                    <div onclick="openModal('${resort.id}')" class="bg-white rounded-2xl shadow-sm overflow-hidden card-hover border border-gray-200 cursor-pointer flex flex-col h-full group">
-                        <div class="h-32 ${resort.color} flex items-center justify-center relative overflow-hidden transition-colors duration-300">
-                            <i class="fa-solid ${resort.icon} text-6xl text-white opacity-20 transform group-hover:scale-110 transition-transform duration-300"></i>
-                            <div class="absolute top-3 right-3">
-                                <span class="bg-white text-gray-800 px-3 py-1 rounded-full text-[0.7rem] font-bold shadow-sm uppercase tracking-wider">${resort.category}</span>
+                    <div onclick="openModal('${resort.id}')" class="resort-card bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100 cursor-pointer">
+                        <div class="h-40 bg-gray-200 relative flex items-center justify-center">
+                            <img id="img-${resort.id}" src="${resort.imageUrl}" alt="${resort.name}" class="w-full h-full object-cover relative z-10" onerror="this.onerror=null; this.src='https://placehold.co/800x400/e2e8f0/64748b?text=Image+Not+Found';">
+                            <div class="absolute top-3 right-3 z-20">
+                                <span class="bg-white/90 backdrop-blur text-gray-800 px-3 py-1 rounded-full text-[0.65rem] font-bold shadow-sm uppercase tracking-wider">${resort.category}</span>
                             </div>
                         </div>
-                        <div class="p-5 flex-grow flex flex-col">
-                            <h3 class="text-lg font-bold text-gray-900 leading-tight mb-2">${resort.name}</h3>
-                            <div class="text-green-700 text-sm font-bold mb-4">
-                                ${resort.price}
-                            </div>
-                            <div class="mt-auto border-t border-gray-100 pt-3 flex justify-between items-center text-gray-400 text-sm">
-                                <div>${transportIcons}</div>
-                                <span class="text-blue-600 font-medium text-xs flex items-center">Details <i class="fa-solid fa-chevron-right ml-1 text-[0.6rem]"></i></span>
+                        <div class="p-4">
+                            <h3 class="text-lg font-bold text-gray-900 leading-tight mb-1">${resort.name}</h3>
+                            <p class="text-gray-500 text-sm mb-3">From ${basePrice} / night</p>
+                            
+                            <div class="flex justify-between items-center border-t border-gray-50 pt-3">
+                                <div class="flex gap-2 text-gray-400">
+                                    ${resort.transport.map(t => {
+                                        let icon = 'fa-bus';
+                                        if(t==='Monorail') icon='fa-train';
+                                        if(t==='Boat') icon='fa-ship';
+                                        if(t==='Walk') icon='fa-person-walking';
+                                        if(t==='Skyliner') icon='fa-cable-car';
+                                        return `<i class="fa-solid ${icon} text-sm" title="${t}"></i>`;
+                                    }).join('')}
+                                </div>
+                                <span class="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold">View Rooms</span>
                             </div>
                         </div>
                     </div>
@@ -463,108 +667,261 @@
             });
         }
 
+        // 2. Filter Logic
         function filterResorts(category) {
-            // Update buttons
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 if (btn.dataset.category === category) {
-                    btn.classList.remove('bg-white/20', 'text-white');
-                    btn.classList.add('bg-yellow-400', 'text-blue-900', 'hover:bg-yellow-300');
+                    btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-200');
+                    btn.classList.add('bg-blue-600', 'text-white', 'border-transparent');
                 } else {
-                    btn.classList.add('bg-white/20', 'text-white');
-                    btn.classList.remove('bg-yellow-400', 'text-blue-900', 'hover:bg-yellow-300');
+                    btn.classList.add('bg-white', 'text-gray-700', 'border-gray-200');
+                    btn.classList.remove('bg-blue-600', 'text-white', 'border-transparent');
                 }
             });
 
-            // Filter data
-            if (category === 'All') {
-                renderGrid(resortsData);
-            } else {
-                renderGrid(resortsData.filter(r => r.category === category));
-            }
+            if (category === 'All') renderGrid(resortsData);
+            else renderGrid(resortsData.filter(r => r.category === category));
         }
 
+        // 3. Modal Logic
         function openModal(resortId) {
             const resort = resortsData.find(r => r.id === resortId);
             if (!resort) return;
 
-            // Populate Modal Content
+            const modalImg = document.getElementById('modalImage');
+            modalImg.src = resort.imageUrl;
+            modalImg.onerror = function() {
+                this.onerror=null; 
+                this.src='https://placehold.co/800x400/e2e8f0/64748b?text=Image+Not+Found';
+            };
+            
             document.getElementById('modalTitle').textContent = resort.name;
-            document.getElementById('modalPrice').textContent = resort.price;
             document.getElementById('modalCategoryBadge').textContent = resort.category;
             
-            const header = document.getElementById('modalHeader');
-            // Remove previous color classes
-            header.className = `px-6 py-8 text-white relative ${resort.color}`;
-            document.getElementById('modalHeaderIcon').className = `fa-solid ${resort.icon} text-[12rem] -rotate-12 transform scale-150`;
-
-            // Rooms
             const roomsContainer = document.getElementById('modalRooms');
             roomsContainer.innerHTML = resort.rooms.map(room => `
-                <li class="flex justify-between items-center text-sm border-b border-gray-50 pb-2 last:border-0 last:pb-0">
-                    <span class="text-gray-800 font-medium">${room.name}</span>
-                    <span class="text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">${room.sqft} sq ft</span>
+                <li class="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 border-b border-gray-100 last:border-0 last:pb-0">
+                    <div class="flex flex-col">
+                        <span class="text-gray-900 font-bold text-sm">${room.name}</span>
+                        <span class="text-gray-400 text-xs">${room.sqft} sq ft</span>
+                    </div>
+                    <span class="text-green-600 font-bold mt-1 sm:mt-0">${room.price} <span class="text-xs text-gray-500 font-medium">/ night</span></span>
                 </li>
             `).join('');
 
-            // Transport
             const transportContainer = document.getElementById('modalTransport');
             transportContainer.innerHTML = resort.transport.map(t => {
-                let color = 'bg-gray-100 text-gray-700 border-gray-200';
+                let color = 'bg-gray-100 text-gray-700';
                 let icon = 'fa-bus';
-                if(t==='Monorail') { color = 'bg-slate-800 text-white border-slate-900'; icon = 'fa-train'; }
-                if(t==='Skyliner') { color = 'bg-yellow-400 text-slate-900 border-yellow-500'; icon = 'fa-cable-car'; }
-                if(t==='Boat') { color = 'bg-cyan-100 text-cyan-800 border-cyan-200'; icon = 'fa-ship'; }
-                if(t==='Walk') { color = 'bg-emerald-100 text-emerald-800 border-emerald-200'; icon = 'fa-person-walking'; }
-                return `<span class="px-3 py-1.5 rounded-lg text-xs font-bold border ${color} shadow-sm flex items-center"><i class="fa-solid ${icon} mr-2"></i>${t}</span>`;
+                if(t==='Monorail') { color = 'bg-gray-800 text-white'; icon = 'fa-train'; }
+                if(t==='Skyliner') { color = 'bg-yellow-400 text-gray-900'; icon = 'fa-cable-car'; }
+                if(t==='Boat') { color = 'bg-cyan-100 text-cyan-800'; icon = 'fa-ship'; }
+                if(t==='Walk') { color = 'bg-green-100 text-green-800'; icon = 'fa-person-walking'; }
+                return `<span class="px-3 py-1.5 rounded-lg text-xs font-bold ${color} flex items-center"><i class="fa-solid ${icon} mr-2"></i>${t}</span>`;
             }).join('');
 
-            // Dining
             const diningContainer = document.getElementById('modalDining');
             diningContainer.innerHTML = resort.dining.map(d => `
                 <li class="flex items-start">
-                    <i class="fa-solid fa-circle text-[0.4rem] text-gray-300 mt-2 mr-2"></i>
+                    <i class="fa-solid fa-circle text-[0.3rem] text-gray-300 mt-2 mr-2"></i>
                     <span>${d}</span>
                 </li>
             `).join('');
 
-            // Special Features
+            // Popular Foods Insertion
+            const foodsContainer = document.getElementById('modalPopularFoods');
+            foodsContainer.innerHTML = resort.popularFoods.map(f => `
+                <li class="flex items-start">
+                    <i class="fa-solid fa-check text-green-500 mt-1.5 mr-2 text-[0.6rem]"></i>
+                    <span>${f}</span>
+                </li>
+            `).join('');
+
             document.getElementById('modalSpecial').textContent = resort.special;
 
-            // Show Modal
+            // Calendar Initialization
+            const priceStr = resort.rooms[0].price; 
+            const matches = priceStr.match(/\$(\d+,?\d*)/g);
+            if (matches && matches.length >= 2) {
+                currentBasePrice = parseInt(matches[0].replace(/\D/g, ''));
+                currentPeakPrice = parseInt(matches[1].replace(/\D/g, ''));
+            } else if (matches && matches.length === 1) {
+                currentBasePrice = parseInt(matches[0].replace(/\D/g, ''));
+                currentPeakPrice = currentBasePrice * 1.5;
+            }
+            
+            // Set calendar to current real-world month
+            currentMonth = new Date().getMonth();
+            currentYear = new Date().getFullYear();
+            renderCalendar();
+
             const overlay = document.getElementById('modalOverlay');
             overlay.classList.remove('hidden');
-            // Small delay to allow display:block to apply before animating opacity
             setTimeout(() => {
                 overlay.classList.add('active');
-                document.body.style.overflow = 'hidden'; // Prevent background scrolling
             }, 10);
         }
 
         function closeModal(event, force = false) {
-            // Close if clicking outside the modal content, or if force closed via X button
             if (force || event.target.id === 'modalOverlay') {
                 const overlay = document.getElementById('modalOverlay');
                 overlay.classList.remove('active');
-                
-                // Wait for transition to finish before hiding
                 setTimeout(() => {
                     overlay.classList.add('hidden');
-                    document.body.style.overflow = ''; // Restore background scrolling
                 }, 300);
             }
         }
 
-        // Add Escape key listener to close modal
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                const overlay = document.getElementById('modalOverlay');
-                if (!overlay.classList.contains('hidden')) {
-                    closeModal(null, true);
+        // Calendar Logic
+        let currentMonth = 0;
+        let currentYear = 2026;
+        let currentBasePrice = 0;
+        let currentPeakPrice = 0;
+
+        function changeMonth(dir) {
+            currentMonth += dir;
+            if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+            if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendarGrid');
+            const monthLabel = document.getElementById('calendarMonth');
+            grid.innerHTML = '';
+            
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            monthLabel.textContent = `${monthNames[currentMonth]} ${currentYear}`;
+            
+            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            
+            // Empty slots for start of month
+            for (let i = 0; i < firstDay; i++) {
+                grid.innerHTML += `<div class="p-1"></div>`;
+            }
+            
+            // Days
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(currentYear, currentMonth, day);
+                const dayOfWeek = date.getDay();
+                
+                // Simulate seasonal Disney pricing
+                let simulatedPrice = currentBasePrice;
+                const spread = currentPeakPrice - currentBasePrice;
+                
+                // Weekend bump
+                if (dayOfWeek === 5 || dayOfWeek === 6) simulatedPrice += spread * 0.35;
+                
+                // Seasonal bumps
+                if (currentMonth === 11 && day > 20) simulatedPrice = currentPeakPrice; // Christmas
+                else if (currentMonth === 10 && day > 22 && day < 28) simulatedPrice = currentPeakPrice * 0.9; // Thanksgiving
+                else if (currentMonth === 2 || currentMonth === 3) simulatedPrice += spread * 0.7; // Spring Break
+                else if (currentMonth === 5 || currentMonth === 6 || currentMonth === 7) simulatedPrice += spread * 0.5; // Summer
+                else if (currentMonth === 8) simulatedPrice = currentBasePrice; // Slow September
+                else simulatedPrice += spread * 0.15; // Standard padding
+                
+                simulatedPrice = Math.floor(simulatedPrice);
+                
+                grid.innerHTML += `
+                    <div class="border border-gray-100 rounded-lg p-1 flex flex-col items-center justify-center bg-gray-50/50">
+                        <span class="font-bold text-gray-700 leading-none">${day}</span>
+                        <span class="text-[9px] text-green-600 font-bold mt-1">$${simulatedPrice}</span>
+                    </div>
+                `;
+            }
+        }
+
+        // 4. Tab Switching & Map Initialization
+        let mapInitialized = false;
+        let leafletMap = null;
+
+        function switchTab(tabName) {
+            const dirView = document.getElementById('viewDirectory');
+            const mapView = document.getElementById('viewMap');
+            const dirBtn = document.getElementById('tabBtnDirectory');
+            const mapBtn = document.getElementById('tabBtnMap');
+
+            if (tabName === 'directory') {
+                dirView.classList.remove('hidden');
+                mapView.classList.add('hidden');
+                
+                dirBtn.classList.replace('text-gray-400', 'text-blue-600');
+                dirBtn.querySelector('span').classList.replace('font-medium', 'font-semibold');
+                
+                mapBtn.classList.replace('text-blue-600', 'text-gray-400');
+                mapBtn.querySelector('span').classList.replace('font-semibold', 'font-medium');
+            } else if (tabName === 'map') {
+                dirView.classList.add('hidden');
+                mapView.classList.remove('hidden');
+                
+                mapBtn.classList.replace('text-gray-400', 'text-blue-600');
+                mapBtn.querySelector('span').classList.replace('font-medium', 'font-semibold');
+                
+                dirBtn.classList.replace('text-blue-600', 'text-gray-400');
+                dirBtn.querySelector('span').classList.replace('font-semibold', 'font-medium');
+
+                if (!mapInitialized) {
+                    initMap();
+                    mapInitialized = true;
+                } else {
+                    leafletMap.invalidateSize();
                 }
             }
-        });
+        }
 
-        // Initial Render
+        function initMap() {
+            leafletMap = L.map('map', { zoomControl: false }).setView([28.3852, -81.5638], 12);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: '© OpenStreetMap'
+            }).addTo(leafletMap);
+
+            // Add Parks
+            parksData.forEach(park => {
+                const customIcon = L.divIcon({
+                    html: `<div style="background-color: ${park.color}; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); color: white; font-size: 16px; z-index: 1000;">
+                              <i class="fa-solid ${park.icon}"></i>
+                           </div>`,
+                    className: '', 
+                    iconSize: [36, 36],
+                    iconAnchor: [18, 18],
+                    popupAnchor: [0, -18]
+                });
+
+                L.marker(park.coords, { icon: customIcon })
+                    .addTo(leafletMap)
+                    .bindPopup(`<b>${park.name}</b>`);
+            });
+
+            // Add Resorts
+            resortsData.forEach(resort => {
+                let markerColor = "#3b82f6"; // Default blue
+                if(resort.category === 'Value') markerColor = "#8b5cf6"; // Purple
+                if(resort.category === 'Moderate') markerColor = "#10b981"; // Green
+                if(resort.category === 'Deluxe') markerColor = "#f59e0b"; // Orange
+                if(resort.category === 'Villas') markerColor = "#ef4444"; // Red
+
+                const resortIcon = L.divIcon({
+                    html: `<div style="background-color: ${markerColor}; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); color: white; font-size: 12px;">
+                              <i class="fa-solid fa-bed"></i>
+                           </div>`,
+                    className: '', 
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14],
+                    popupAnchor: [0, -14]
+                });
+
+                L.marker(resort.coords, { icon: resortIcon })
+                    .addTo(leafletMap)
+                    .bindPopup(`<b>${resort.name}</b><br><span style="color: ${markerColor}; font-size: 12px; font-weight: bold;">${resort.category}</span>`);
+            });
+            
+            L.control.zoom({ position: 'topright' }).addTo(leafletMap);
+        }
+
+        // Initialize App
         document.addEventListener('DOMContentLoaded', () => {
             renderGrid(resortsData);
         });
